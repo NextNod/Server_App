@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 
 namespace Server
 {
-    class Program
+    class Program // kuku
     {
         protected struct Person
         {
@@ -33,6 +33,7 @@ namespace Server
         {
             Console.Write("Enter port: ");
             TcpListener Server = new TcpListener(Convert.ToInt32(Console.ReadLine()));
+
             Person[] Data = new Person[1];
             Message[] messages = new Message[1];
 
