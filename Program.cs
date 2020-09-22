@@ -12,6 +12,11 @@ namespace Server
 {
     class Program
     {
+        protected struct example 
+        {
+            string exampl;
+        };
+
         protected struct Person
         {
             public string login;
