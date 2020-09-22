@@ -1,24 +1,28 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Net;
+using System.Data;
+using System.Data.SQLite;
 using System.IO;
-using System.Net.Sockets;
+using System.Net;
 using System.Net.Mail;
-using System.Threading.Tasks;
+using System.Net.Sockets;
+using System.Text;
 
 namespace Server
 {
-    class Program // kuku
+    class Program
     {
+        static private string dbFileName = "DataBase.db";
+
+        static private SQLiteConnection dbConnector;
+        static private SQLiteCommand dbCommand;
+
         protected struct Person
         {
             public string login;
             public string pass;
             public string email;
             public int key;
-            public int keyRest;
+            public int keyRest; // для восстановления
         };
 
         protected struct Message
@@ -31,8 +35,24 @@ namespace Server
 
         static void Main(string[] args)
         {
-            Console.Write("Enter port: ");
-            TcpListener Server = new TcpListener(Convert.ToInt32(Console.ReadLine()));
+            Load();
+            Connect();
+
+            //while (true)
+            //{
+            //    try
+            //    {
+            //        CreateQuery(Console.ReadLine());
+            //    }
+            //    catch (SQLiteException e)
+            //    {
+            //        Console.WriteLine(e.Message);
+            //    }
+            //}
+
+            //Console.Write("Enter port: ");
+            TcpListener Server = new TcpListener(111);
+            //TcpListener Server = new TcpListener(Convert.ToInt32(Console.ReadLine()));
 
             Person[] Data = new Person[1];
             Message[] messages = new Message[1];
@@ -49,77 +69,109 @@ namespace Server
                 {
                     Console.WriteLine("Waiting for client...");
                     TcpClient client = Server.AcceptTcpClient();
-                    
+
                     Console.WriteLine("Client Acepted! Waiting for data...");
                     NetworkStream stream = client.GetStream();
                     string type = GetData(stream, true);
-                    
+
                     Console.WriteLine("\nRecive data: \nType: " + type + "\n");
 
                     if (type == "log")
                     {
-
                         string log = GetData(stream, true);
                         string pass = GetData(stream, false);
-                        bool flag = true;
+                        //bool flag = true;
 
-                        for (int i = 0; i < Data.Length; i++)
+                        try
                         {
-                            if (Data[i].login == log)
+                            dbCommand.CommandText = $"SELECT login,password FROM users WHERE login='{log}' and password='{pass}';";
+                            SQLiteDataReader r = dbCommand.ExecuteReader();
+                            r.Read();
+                            if (!r.HasRows)
                             {
-                                if (Data[i].pass == pass)
-                                {
-                                    Data[i].key = new Random().Next(99999999, 999999999);
-                                    stream.Write(Encoding.UTF8.GetBytes(Convert.ToString(Data[i].key)), 0, Encoding.UTF8.GetBytes(Convert.ToString(Data[i].key)).Length);
-                                    Console.WriteLine("User login: " + log + ", " + pass + ", " + Data[i].email + ", " + Data[i].key);
-                                    flag = false;
-                                    break;
-                                }
-                                flag = false;
-                                Console.WriteLine("Wrong pass");
-                                stream.Write(Encoding.UTF8.GetBytes("{ERR}"), 0, Encoding.UTF8.GetBytes("{ERR}").Length);
-                                break;
+                                r.Close();
+                                string s = "<Server>: No such user or wrong password.";
+                                Console.WriteLine(s);
+                                stream.Write(Encoding.UTF8.GetBytes("{INF}" + s), 0, Encoding.UTF8.GetBytes("{INF}" + s).Length);
+                            }
+                            else
+                            {
+                                Console.WriteLine("OK");
+
+                                r.Close();
+                                int key = (new Random().Next(100000000, 1000000000));
+                                dbCommand.CommandText = $"UPDATE users SET key='{key.ToString()}' WHERE login='{log}';";
+                                dbCommand.ExecuteNonQuery();
+
+                                string s = key.ToString();
+                                stream.Write(Encoding.UTF8.GetBytes(s), 0, Encoding.UTF8.GetBytes(s).Length);
+
+                                dbCommand.CommandText = $"SELECT email FROM users WHERE login='{log}';";
+                                SQLiteDataReader r2 = dbCommand.ExecuteReader();
+                                r2.Read();
+                                string email = r2[0].ToString();
+                                r2.Close();
+
+                                Console.WriteLine($"User login: {log}, {pass}, {email}, {key}.");
                             }
                         }
-                        if (flag)
+                        catch (SQLiteException ex)
                         {
-                            Console.WriteLine("Login not found");
-                            stream.Write(Encoding.UTF8.GetBytes("{ERR}"), 0, Encoding.UTF8.GetBytes("{ERR}").Length);
+                            Console.WriteLine("<System>: SQLiteException => " + ex.Message);
+                        }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine("<System>: Exception => " + e.Message);
                         }
                     }
                     else if (type == "reg")
                     {
-                        bool check = true;
                         string log = GetData(stream, true);
                         string pass = GetData(stream, true);
                         string email = GetData(stream, false);
 
-                        for (int i = 0; i < Data.Length; i++)
+                        try
                         {
-                            if (Data[i].login == log)
+                            dbCommand.CommandText = $"SELECT login FROM users WHERE login='{log}';";
+                            SQLiteDataReader r = dbCommand.ExecuteReader();
+                            if (r.HasRows)
                             {
-                                Console.WriteLine("Entery login");
-                                stream.Write(Encoding.UTF8.GetBytes("{ERR}"), 0, Encoding.UTF8.GetBytes("{ERR}").Length);
-                                check = false;
-                                break;
+                                r.Close();
+                                string s = "<Server>: This login is already taken!";
+                                Console.WriteLine(s);
+                                stream.Write(Encoding.UTF8.GetBytes("{INF}" + s), 0, Encoding.UTF8.GetBytes("{INF}" + s).Length);
                             }
+                            else
+                            {
+                                r.Close();
+                                dbCommand.CommandText = $"SELECT email FROM users WHERE login='{email}';";
+                                r = dbCommand.ExecuteReader();
+                                if (r.HasRows)
+                                {
+                                    r.Close();
+                                    string s = "<Server>: This email is already taken!";
+                                    Console.WriteLine(s);
+                                    stream.Write(Encoding.UTF8.GetBytes("{INF}" + s), 0, Encoding.UTF8.GetBytes("{INF}" + s).Length);
+                                }
+                                else
+                                {
+                                    r.Close();
+                                    dbCommand.CommandText = $"INSERT INTO users(login, password, email) VALUES('{log}', '{pass}', '{email}');";
+                                    dbCommand.ExecuteNonQuery();
+                                    stream.Write(Encoding.UTF8.GetBytes("{INF}Success!"), 0, Encoding.UTF8.GetBytes("{INF}Success!").Length);
+                                    Console.WriteLine($"New user: {log}, {pass}, {email}.");
+                                }
+                            }
+                            if (!r.IsClosed)
+                                r.Close();
                         }
-
-                        if (check)
+                        catch (SQLiteException ex)
                         {
-                            Person[] temp1 = new Person[Data.Length + 1];
-
-                            for (int i = 0; i < Data.Length; i++)
-                            {
-                                temp1[i] = Data[i];
-                            }
-
-                            temp1[Data.Length].login = log;
-                            temp1[Data.Length].pass = pass;
-                            temp1[Data.Length].email = email;
-                            Data = temp1;
-                            stream.Write(Encoding.UTF8.GetBytes("{SYS}"), 0, Encoding.UTF8.GetBytes("{SYS}").Length);
-                            Console.WriteLine("New person: " + log + ", " + pass + ", " + email + ".");
+                            Console.WriteLine("<System>: SQLiteException => " + ex.Message);
+                        }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine("<System>: Exception => " + e.Message);
                         }
                     }
                     else if (type == "send")
@@ -246,14 +298,8 @@ namespace Server
                     {
                         string key = GetData(stream, false);
 
-                        for (int i = 0; i < Data.Length; i++)
-                        {
-                            if (Data[i].key == Convert.ToInt32(key))
-                            {
-                                Data[i].key = 0;
-                                stream.Write(Encoding.UTF8.GetBytes("{EXT}"), 0, Encoding.UTF8.GetBytes("{EXT}").Length);
-                            }
-                        }
+                        dbCommand.CommandText = $"UPDATE users SET key='0' WHERE key='{key}';";
+                        dbCommand.ExecuteNonQuery();
                     }
 
                     stream.Close();
@@ -297,6 +343,83 @@ namespace Server
                 stream.Write(Encoding.UTF8.GetBytes("{SYS}"), 0, Encoding.UTF8.GetBytes("{SYS}").Length);
 
             return data;
+        }
+
+        static protected void Load()
+        {
+            dbCommand = new SQLiteCommand();
+            dbConnector = new SQLiteConnection();
+        }
+
+        // Устанавливает соединение с БД, если ее нет - создает
+        static protected void Connect()
+        {
+            if (!(File.Exists(dbFileName)))
+            {
+                SQLiteConnection.CreateFile(dbFileName);
+                Console.WriteLine($"<System>: file \"{dbFileName}\" was created.");
+            }
+
+            try
+            {
+                if (dbConnector.State != ConnectionState.Open)
+                {
+                    dbConnector = new SQLiteConnection($"Data source = {dbFileName};Version=3;");
+                    dbConnector.Open();
+
+                    dbCommand.Connection = dbConnector;
+
+                    Console.WriteLine($"<System>: Database \"{dbFileName}\" connected.");
+                }
+                else
+                {
+                    Console.WriteLine("<System>: Database already connected!");
+                }
+            }
+            catch (SQLiteException ex)
+            {
+                Console.WriteLine("<System>: " + ex.Message);
+            }
+        }
+
+        // Выполняет запрос
+        static protected void CreateQuery(string sqlQuery)
+        {
+            if (dbConnector.State != ConnectionState.Open)
+            {
+                Console.WriteLine("<System>: Database is not connected!");
+                return;
+            }
+
+            try
+            {
+                if (sqlQuery.Contains("SELECT"))
+                {
+                    dbCommand.CommandText = sqlQuery;
+                    SQLiteDataReader r = dbCommand.ExecuteReader();
+                    string s = "";
+                    while (r.Read())
+                    {
+                        for (int i = 0; i < r.FieldCount; i++)
+                            Console.Write(r[i].ToString() + "|");
+                        Console.WriteLine();
+                    }
+                    r.Close();
+                }
+                else
+                {
+                    dbCommand.CommandText = sqlQuery;
+                    dbCommand.ExecuteNonQuery();
+                }
+            }
+            catch (SQLiteException ex)
+            {
+                Console.WriteLine("<System>: " + ex.Message);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("<System>: Exception " + e.Message);
+            }
         }
     }
 }
