@@ -5,6 +5,7 @@ using System.IO;
 using System.Net;
 using System.Net.Mail;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace Server
@@ -92,14 +93,18 @@ namespace Server
                                 r.Close();
                                 string s = "<Server>: No such user or wrong password.";
                                 Console.WriteLine(s);
-                                stream.Write(Encoding.UTF8.GetBytes("{INF}" + s), 0, Encoding.UTF8.GetBytes("{INF}" + s).Length);
+                                stream.Write(Encoding.UTF8.GetBytes("{ER1}" + s), 0, Encoding.UTF8.GetBytes("{ER1}" + s).Length);
                             }
                             else
                             {
                                 Console.WriteLine("OK");
 
                                 r.Close();
+
                                 int key = (new Random().Next(100000000, 1000000000));
+
+                                // проверить нет ли сгенерированного ключа в БД
+
                                 dbCommand.CommandText = $"UPDATE users SET key='{key.ToString()}' WHERE login='{log}';";
                                 dbCommand.ExecuteNonQuery();
 
@@ -139,7 +144,7 @@ namespace Server
                                 r.Close();
                                 string s = "<Server>: This login is already taken!";
                                 Console.WriteLine(s);
-                                stream.Write(Encoding.UTF8.GetBytes("{INF}" + s), 0, Encoding.UTF8.GetBytes("{INF}" + s).Length);
+                                stream.Write(Encoding.UTF8.GetBytes("{ER1}" + s), 0, Encoding.UTF8.GetBytes("{ER1}" + s).Length);
                             }
                             else
                             {
@@ -151,7 +156,7 @@ namespace Server
                                     r.Close();
                                     string s = "<Server>: This email is already taken!";
                                     Console.WriteLine(s);
-                                    stream.Write(Encoding.UTF8.GetBytes("{INF}" + s), 0, Encoding.UTF8.GetBytes("{INF}" + s).Length);
+                                    stream.Write(Encoding.UTF8.GetBytes("{ER1}" + s), 0, Encoding.UTF8.GetBytes("{ER1}" + s).Length);
                                 }
                                 else
                                 {
@@ -294,8 +299,66 @@ namespace Server
                             }
                         }
                     }
-                    else if (type == "exit")
+                    else if (type == "add_friend")
                     {
+                        string key = GetData(stream, true);
+
+                        // проверить подлинность ключа
+
+                        string login = GetData(stream, false);
+
+                        // проверить нет уже входящего запроса
+
+                        try
+                        {
+                            // если пользователь существует
+                            dbCommand.CommandText = $"SELECT id FROM users WHERE login='{login}';";
+                            SQLiteDataReader r = dbCommand.ExecuteReader();
+                            if (r.HasRows)
+                            {
+                                r.Close();
+                                dbCommand.CommandText = $"INSERT INTO requests(sender, receiver) VALUES ((SELECT users.id FROM users WHERE key='{key}'), (SELECT users.id FROM users WHERE login='{login}'));";
+                                dbCommand.ExecuteNonQuery();
+
+                                string s = "<Server>: Request has been sent!";
+                                Console.WriteLine(s);
+                                stream.Write(Encoding.UTF8.GetBytes("{INF}" + s), 0, Encoding.UTF8.GetBytes("{INF}" + s).Length);
+                            }
+                            else // пользователя, которому отправляют запрос нет в БД
+                            {
+                                r.Close();
+                                string s = "<Server>: This user is not founded!";
+                                Console.WriteLine(s);
+                                stream.Write(Encoding.UTF8.GetBytes("{ER1}" + s), 0, Encoding.UTF8.GetBytes("{ER1}" + s).Length);
+                            }
+                        }
+                        catch (SQLiteException ex)
+                        {
+                            Console.WriteLine("<System>: SQLiteException => " + ex.Message);
+                        }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine("<System>: Exception => " + e.Message);
+                        }
+                    }
+                    else if (type == "check_requests")
+                    {
+                        
+                    }
+                    else if (type == "delete_friend")
+                    {
+
+                    }
+                    else if (type == "accept_request")
+                    {
+
+                    }
+                    else if (type == "decline_request")
+                    {
+
+                    }
+                    else if (type == "exit")
+                    { // добавить проверку на подлиность ключа
                         string key = GetData(stream, false);
 
                         dbCommand.CommandText = $"UPDATE users SET key='0' WHERE key='{key}';";
