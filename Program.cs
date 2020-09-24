@@ -39,18 +39,6 @@ namespace Server
             Load();
             Connect();
 
-            //while (true)
-            //{
-            //    try
-            //    {
-            //        CreateQuery(Console.ReadLine());
-            //    }
-            //    catch (SQLiteException e)
-            //    {
-            //        Console.WriteLine(e.Message);
-            //    }
-            //}
-
             //Console.Write("Enter port: ");
             TcpListener Server = new TcpListener(111);
             //TcpListener Server = new TcpListener(Convert.ToInt32(Console.ReadLine()));
@@ -83,50 +71,37 @@ namespace Server
                         string pass = GetData(stream, false);
                         //bool flag = true;
 
-                        try
+                        dbCommand.CommandText = $"SELECT login,password FROM users WHERE login='{log}' and password='{pass}';";
+                        SQLiteDataReader r = dbCommand.ExecuteReader();
+                        r.Read();
+                        if (!r.HasRows)
                         {
-                            dbCommand.CommandText = $"SELECT login,password FROM users WHERE login='{log}' and password='{pass}';";
-                            SQLiteDataReader r = dbCommand.ExecuteReader();
-                            r.Read();
-                            if (!r.HasRows)
-                            {
-                                r.Close();
-                                string s = "<Server>: No such user or wrong password.";
-                                Console.WriteLine(s);
-                                stream.Write(Encoding.UTF8.GetBytes("{ER1}" + s), 0, Encoding.UTF8.GetBytes("{ER1}" + s).Length);
-                            }
-                            else
-                            {
-                                Console.WriteLine("OK");
-
-                                r.Close();
-
-                                int key = (new Random().Next(100000000, 1000000000));
-
-                                // проверить нет ли сгенерированного ключа в БД
-
-                                dbCommand.CommandText = $"UPDATE users SET key='{key.ToString()}' WHERE login='{log}';";
-                                dbCommand.ExecuteNonQuery();
-
-                                string s = key.ToString();
-                                stream.Write(Encoding.UTF8.GetBytes(s), 0, Encoding.UTF8.GetBytes(s).Length);
-
-                                dbCommand.CommandText = $"SELECT email FROM users WHERE login='{log}';";
-                                SQLiteDataReader r2 = dbCommand.ExecuteReader();
-                                r2.Read();
-                                string email = r2[0].ToString();
-                                r2.Close();
-
-                                Console.WriteLine($"User login: {log}, {pass}, {email}, {key}.");
-                            }
+                            r.Close();
+                            string s = "<Server>: No such user or wrong password.";
+                            Console.WriteLine(s);
+                            stream.Write(Encoding.UTF8.GetBytes("{ER1}" + s), 0, Encoding.UTF8.GetBytes("{ER1}" + s).Length);
                         }
-                        catch (SQLiteException ex)
+                        else
                         {
-                            Console.WriteLine("<System>: SQLiteException => " + ex.Message);
-                        }
-                        catch (Exception e)
-                        {
-                            Console.WriteLine("<System>: Exception => " + e.Message);
+                            r.Close();
+
+                            int key = (new Random().Next(100000000, 1000000000));
+
+                            // проверить нет ли сгенерированного ключа в БД
+
+                            dbCommand.CommandText = $"UPDATE users SET key='{key.ToString()}' WHERE login='{log}';";
+                            dbCommand.ExecuteNonQuery();
+
+                            string s = key.ToString();
+                            stream.Write(Encoding.UTF8.GetBytes(s), 0, Encoding.UTF8.GetBytes(s).Length);
+
+                            dbCommand.CommandText = $"SELECT email FROM users WHERE login='{log}';";
+                            SQLiteDataReader r2 = dbCommand.ExecuteReader();
+                            r2.Read();
+                            string email = r2[0].ToString();
+                            r2.Close();
+
+                            Console.WriteLine($"User login: {log}, {pass}, {email}, {key}.");
                         }
                     }
                     else if (type == "reg")
@@ -135,125 +110,125 @@ namespace Server
                         string pass = GetData(stream, true);
                         string email = GetData(stream, false);
 
-                        try
+                        dbCommand.CommandText = $"SELECT login FROM users WHERE login='{log}';";
+                        SQLiteDataReader r = dbCommand.ExecuteReader();
+                        if (r.HasRows)
                         {
-                            dbCommand.CommandText = $"SELECT login FROM users WHERE login='{log}';";
-                            SQLiteDataReader r = dbCommand.ExecuteReader();
+                            r.Close();
+                            string s = "<Server>: This login is already taken!";
+                            Console.WriteLine(s);
+                            stream.Write(Encoding.UTF8.GetBytes("{ER1}" + s), 0, Encoding.UTF8.GetBytes("{ER1}" + s).Length);
+                        }
+                        else
+                        {
+                            r.Close();
+                            dbCommand.CommandText = $"SELECT email FROM users WHERE login='{email}';";
+                            r = dbCommand.ExecuteReader();
                             if (r.HasRows)
                             {
                                 r.Close();
-                                string s = "<Server>: This login is already taken!";
+                                string s = "<Server>: This email is already taken!";
                                 Console.WriteLine(s);
                                 stream.Write(Encoding.UTF8.GetBytes("{ER1}" + s), 0, Encoding.UTF8.GetBytes("{ER1}" + s).Length);
                             }
                             else
                             {
                                 r.Close();
-                                dbCommand.CommandText = $"SELECT email FROM users WHERE login='{email}';";
-                                r = dbCommand.ExecuteReader();
-                                if (r.HasRows)
-                                {
-                                    r.Close();
-                                    string s = "<Server>: This email is already taken!";
-                                    Console.WriteLine(s);
-                                    stream.Write(Encoding.UTF8.GetBytes("{ER1}" + s), 0, Encoding.UTF8.GetBytes("{ER1}" + s).Length);
-                                }
-                                else
-                                {
-                                    r.Close();
-                                    dbCommand.CommandText = $"INSERT INTO users(login, password, email) VALUES('{log}', '{pass}', '{email}');";
-                                    dbCommand.ExecuteNonQuery();
-                                    stream.Write(Encoding.UTF8.GetBytes("{INF}Success!"), 0, Encoding.UTF8.GetBytes("{INF}Success!").Length);
-                                    Console.WriteLine($"New user: {log}, {pass}, {email}.");
-                                }
+                                dbCommand.CommandText = $"INSERT INTO users(login, password, email) VALUES('{log}', '{pass}', '{email}');";
+                                dbCommand.ExecuteNonQuery();
+                                stream.Write(Encoding.UTF8.GetBytes("{INF}Success!"), 0, Encoding.UTF8.GetBytes("{INF}Success!").Length);
+                                Console.WriteLine($"New user: {log}, {pass}, {email}.");
                             }
-                            if (!r.IsClosed)
-                                r.Close();
                         }
-                        catch (SQLiteException ex)
-                        {
-                            Console.WriteLine("<System>: SQLiteException => " + ex.Message);
-                        }
-                        catch (Exception e)
-                        {
-                            Console.WriteLine("<System>: Exception => " + e.Message);
-                        }
+                        if (!r.IsClosed)
+                            r.Close();
                     }
                     else if (type == "send")
                     {
-                        string log = GetData(stream, true);
-                        string pass = GetData(stream, true);
+                        string key = GetData(stream, true); // кто отправляет
+                        string login = GetData(stream, true); // кому отправлять
                         string messag = GetData(stream, false);
 
-                        Console.WriteLine(log + " " + pass + " " + messag);
+                        Console.WriteLine(login + " " + key + " " + messag);
 
-                        string from = "";
-                        bool check = false;
-
-                        for (int i = 0; i < Data.Length; i++)
+                        string idSender = GetIdByKey(key);
+                        if (idSender != null)
                         {
-                            if (Data[i].key == Convert.ToInt32(log) && log != "0")
+                            string idReceiver = GetIdByLogin(login);
+                            if (idReceiver != null)
                             {
-                                from = Data[i].login;
-                                check = true;
-                                break;
+                                // отправить сообщение
+                                dbCommand.CommandText = $"INSERT INTO messages(sender, receiver, message) VALUES('{idSender}', '{idReceiver}', '{messag}');";
+                                dbCommand.ExecuteNonQuery();
+                                Console.WriteLine($"New message: id sender:{idSender} -> id receiver:{idReceiver}");
+                                stream.Write(Encoding.UTF8.GetBytes("{INF}"), 0, Encoding.UTF8.GetBytes("{INF}").Length);
+                            }
+                            // получатель не найден
+                            else
+                            {
+                                string s = "<Server>: Receiver is not founded!";
+                                stream.Write(Encoding.UTF8.GetBytes("{ER1}" + s), 0, Encoding.UTF8.GetBytes("{ER1}" + s).Length);
                             }
                         }
-
-                        if (check)
-                        {
-                            Message[] tempM = new Message[messages.Length + 1];
-
-                            for (int i = 0; i < messages.Length; i++)
-                            {
-                                tempM[i] = messages[i];
-                            }
-
-                            tempM[messages.Length].from = from;
-                            tempM[messages.Length].to = pass;
-                            tempM[messages.Length].value = messag;
-                            messages = tempM;
-
-                            stream.Write(Encoding.UTF8.GetBytes("{SYS}"), 0, Encoding.UTF8.GetBytes("{SYS}").Length);
-                            Console.WriteLine("New message: " + from + " -> " + pass);
-                        }
+                        //  ключ не действителен
                         else
                         {
-                            Console.WriteLine("Err with messag");
-                            stream.Write(Encoding.UTF8.GetBytes("{ERR}"), 0, Encoding.UTF8.GetBytes("{ERR}").Length);
+                            string s = "<Server>: key is not valid!";
+                            Console.WriteLine(s);
+                            stream.Write(Encoding.UTF8.GetBytes("{ER1}" + s), 0, Encoding.UTF8.GetBytes("{ER1}" + s).Length);
                         }
                     }
                     else if (type == "messages")
                     {
-                        string log = GetData(stream, false);
-                        string result = "";
-                        bool newM = false;
+                        string key = GetData(stream, true); // кто отправляет
+                        string login = GetData(stream, false); // кому отправлять
 
-                        for (int i = 0; i < Data.Length; i++)
+                        string idSender = GetIdByLogin(login);
+                        if (idSender != null)
                         {
-                            if (Data[i].key == Convert.ToInt32(log) && log != "0")
+                            string idReceiver = GetIdByKey(key);
+                            if (idReceiver != null)
                             {
-                                newM = true;
-                                for (int j = 0; j < messages.Length; j++)
+                                // провеить входящие сообщения
+                                dbCommand.CommandText = $"SELECT message FROM messages WHERE sender='{idSender}' AND receiver='{idReceiver}' AND isReaded='0';";
+                                SQLiteDataReader r = dbCommand.ExecuteReader();
+                                if (r.HasRows)
                                 {
-                                    if (messages[j].to == Data[i].login)
+                                    string data = "";
+                                    while(r.Read())
                                     {
-                                        result += messages[j].from + ":" + messages[j].value + "\n";
-                                        Console.WriteLine("Get messages: " + log);
+                                        data += "\nMessage:\n" + r[0].ToString() + "\n";
+                                        //Console.WriteLine("show: " + r[0].ToString());
                                     }
+                                    r.Close();
+
+                                    // помечаем как прочитанное
+                                    dbCommand.CommandText = $"UPDATE messages SET isReaded='1' WHERE sender='{idSender}' AND receiver='{idReceiver}' AND isReaded='0';";
+                                    dbCommand.ExecuteNonQuery();
+                                    stream.Write(Encoding.UTF8.GetBytes("{INF}" + data), 0, Encoding.UTF8.GetBytes("{INF}" + data).Length);
                                 }
-                                break;
+                                // новых сообщений нет
+                                else
+                                {
+                                    string s = "<Server>: There is no new incoming messages!";
+                                    Console.WriteLine(s);
+                                    stream.Write(Encoding.UTF8.GetBytes("{ER1}" + s), 0, Encoding.UTF8.GetBytes("{ER1}" + s).Length);
+                                }
+                            }
+                            //  ключ не действителен
+                            else
+                            {
+                                string s = "<Server>: key is not valid!";
+                                Console.WriteLine(s);
+                                stream.Write(Encoding.UTF8.GetBytes("{ER1}" + s), 0, Encoding.UTF8.GetBytes("{ER1}" + s).Length);
                             }
                         }
-
-                        if (newM)
-                        {
-                            stream.Write(Encoding.UTF8.GetBytes(result), 0, Encoding.UTF8.GetBytes(result).Length);
-                        }
+                        // отправитель не найден
                         else
                         {
-                            stream.Write(Encoding.UTF8.GetBytes("{ERR}"), 0, Encoding.UTF8.GetBytes("{ERR}").Length);
-                            Console.WriteLine("No messages");
+                            string s = "<Server>: Sender is not founded!";
+                            Console.WriteLine(s);
+                            stream.Write(Encoding.UTF8.GetBytes("{ER1}" + s), 0, Encoding.UTF8.GetBytes("{ER1}" + s).Length);
                         }
                     }
                     else if (type == "rest")
@@ -301,61 +276,370 @@ namespace Server
                     }
                     else if (type == "add_friend")
                     {
-                        string key = GetData(stream, true);
+                        // нет ли пользователя уже в друзьях
 
-                        // проверить подлинность ключа
+                        string key = GetData(stream, true); // ключ отправителя
+                        string login = GetData(stream, false); // логин получателя
 
-                        string login = GetData(stream, false);
+                        // вытянуть id получателя
+                        string idReceiver = GetIdByLogin(login);
 
-                        // проверить нет уже входящего запроса
-
-                        try
+                        // если данные имеются, то получатель существует
+                        if (idReceiver != null) 
                         {
-                            // если пользователь существует
-                            dbCommand.CommandText = $"SELECT id FROM users WHERE login='{login}';";
-                            SQLiteDataReader r = dbCommand.ExecuteReader();
-                            if (r.HasRows)
-                            {
-                                r.Close();
-                                dbCommand.CommandText = $"INSERT INTO requests(sender, receiver) VALUES ((SELECT users.id FROM users WHERE key='{key}'), (SELECT users.id FROM users WHERE login='{login}'));";
-                                dbCommand.ExecuteNonQuery();
+                            // вытянуть id отправителя
+                            string idSender = GetIdByKey(key);
 
-                                string s = "<Server>: Request has been sent!";
-                                Console.WriteLine(s);
-                                stream.Write(Encoding.UTF8.GetBytes("{INF}" + s), 0, Encoding.UTF8.GetBytes("{INF}" + s).Length);
-                            }
-                            else // пользователя, которому отправляют запрос нет в БД
+                            // если ключ имеется в БД, то отправитель аутетифицирован
+                            if (idSender != null)
                             {
-                                r.Close();
-                                string s = "<Server>: This user is not founded!";
-                                Console.WriteLine(s);
-                                stream.Write(Encoding.UTF8.GetBytes("{ER1}" + s), 0, Encoding.UTF8.GetBytes("{ER1}" + s).Length);
+                                // не отправлен ли уже исходящий запрос
+                                dbCommand.CommandText = $"SELECT * FROM requests WHERE sender='{idSender}' AND receiver='{idReceiver}';";
+                                SQLiteDataReader r = dbCommand.ExecuteReader();
+
+                                // если еще не отправлен
+                                if (!r.HasRows)
+                                {
+                                    r.Close();
+
+                                    // не отправлен ли уже входящий запрос
+                                    dbCommand.CommandText = $"SELECT * FROM requests WHERE sender = '{idReceiver}' AND receiver = '{idSender}';";
+                                    r = dbCommand.ExecuteReader();
+                                    //  не отправлен
+                                    if (!r.HasRows)
+                                    {
+                                        r.Close();
+
+                                        // Не являются ли пользователи уже друзьями
+                                        dbCommand.CommandText = $"SELECT * FROM friends WHERE (idUser1='{idReceiver}' AND idUser2='{idSender}') OR (idUser2='{idReceiver}' AND idUser1='{idSender}');";
+                                        r = dbCommand.ExecuteReader();
+
+                                        // еще не друзья
+                                        if (!r.HasRows)
+                                        {
+                                            r.Close();
+
+                                            // Отправить запрос
+                                            dbCommand.CommandText = $"INSERT INTO requests(sender, receiver) VALUES ('{idSender}', '{idReceiver}');";
+                                            dbCommand.ExecuteNonQuery();
+
+                                            string s = "<Server>: Success! Request has been sent!";
+                                            stream.Write(Encoding.UTF8.GetBytes("{INF}" + s), 0, Encoding.UTF8.GetBytes("{INF}" + s).Length);
+                                        }
+                                        // уже друзья
+                                        else
+                                        {
+                                            r.Close();
+                                            string s = "<Server>: Failed: You are already friends!";
+                                            stream.Write(Encoding.UTF8.GetBytes("{ER1}" + s), 0, Encoding.UTF8.GetBytes("{ER1}" + s).Length);
+                                        }
+                                    }
+                                    // отправлен
+                                    else
+                                    {
+                                        r.Close();
+                                        string s = "<Server>: Failed: Outgoing request has been already sent!";
+                                        stream.Write(Encoding.UTF8.GetBytes("{ER1}" + s), 0, Encoding.UTF8.GetBytes("{ER1}" + s).Length);
+                                    }
+                                }
+                                // если уже отправлен
+                                else
+                                {
+                                    r.Close();
+                                    string s = "<Server>: Failed: Incoming request has been already sent!";
+                                    stream.Write(Encoding.UTF8.GetBytes("{ER1}" + s), 0, Encoding.UTF8.GetBytes("{ER1}" + s).Length);
+                                }
+                            }
+                            // Если ключа нет в базе
+                            else
+                            {
+                                //
+                                stream.Write(Encoding.UTF8.GetBytes("{ER1}"), 0, Encoding.UTF8.GetBytes("{ER1}").Length);
                             }
                         }
-                        catch (SQLiteException ex)
+                        // получателя нет в БД
+                        else
                         {
-                            Console.WriteLine("<System>: SQLiteException => " + ex.Message);
-                        }
-                        catch (Exception e)
-                        {
-                            Console.WriteLine("<System>: Exception => " + e.Message);
+                            string s = "<Server>: This user is not founded!";
+                            Console.WriteLine(s);
+                            stream.Write(Encoding.UTF8.GetBytes("{ER1}" + s), 0, Encoding.UTF8.GetBytes("{ER1}" + s).Length);
                         }
                     }
                     else if (type == "check_requests")
                     {
-                        
-                    }
-                    else if (type == "delete_friend")
-                    {
+                        string key = GetData(stream, false);
 
+                        string id = GetIdByKey(key);
+                        string data = "";
+
+                        // выбрать входящие запросы
+                        dbCommand.CommandText = $"SELECT login FROM users JOIN requests ON users.id = requests.sender AND requests.receiver='{id}';";
+                        SQLiteDataReader r = dbCommand.ExecuteReader();
+                        // если входящие запросы имеются
+                        if (r.HasRows)
+                        {
+                            while(r.Read())
+                            {
+                                data += r[0].ToString() + "\n";
+                            }
+                            stream.Write(Encoding.UTF8.GetBytes("{INF}" + data), 0, Encoding.UTF8.GetBytes("{INF}" + data).Length);
+                            r.Close();
+                        }   
+                        // входящий запросов нет
+                        else
+                        {
+                            r.Close();
+                            // запросов нет
+                            stream.Write(Encoding.UTF8.GetBytes("{ER1}"), 0, Encoding.UTF8.GetBytes("{ER1}").Length);
+                        }
+                    }
+                    // Проверить исходящие запросы на дружбу
+                    else if (type == "check_outgoing")
+                    {
+                        string key = GetData(stream, false);
+
+                        string id = GetIdByKey(key);
+                        string data = "";
+
+                        // выбрать входящие запросы
+                        dbCommand.CommandText = $"SELECT login FROM users JOIN requests ON users.id = requests.receiver AND requests.sender='{id}';";
+                        SQLiteDataReader r = dbCommand.ExecuteReader();
+                        // если входящие запросы имеются
+                        if (r.HasRows)
+                        {
+                            while (r.Read())
+                            {
+                                data += r[0].ToString() + "\n";
+                            }
+                            stream.Write(Encoding.UTF8.GetBytes("{INF}" + data), 0, Encoding.UTF8.GetBytes("{INF}" + data).Length);
+                            r.Close();
+                        }
+                        // входящий запросов нет
+                        else
+                        {
+                            r.Close();
+                            // запросов нет
+                            stream.Write(Encoding.UTF8.GetBytes("{ER1}"), 0, Encoding.UTF8.GetBytes("{ER1}").Length);
+                        }
                     }
                     else if (type == "accept_request")
                     {
+                        string key = GetData(stream, true);
+                        string login = GetData(stream, false);
+
+                        string idReceiver = GetIdByKey(key);
+                        if (idReceiver != null)
+                        {
+                            string idSender = GetIdByLogin(login);
+                            if (idSender != null)
+                            {
+                                dbCommand.CommandText = $"SELECT * FROM requests WHERE receiver='{idReceiver}' AND sender='{idSender}';";
+                                SQLiteDataReader r = dbCommand.ExecuteReader();
+
+                                if (r.HasRows) // запрос существует
+                                {
+                                    r.Close();
+                                    // удалить запрос в друзья из таблицы
+                                    dbCommand.CommandText = $"DELETE FROM requests WHERE receiver='{idReceiver}' AND sender='{idSender}';";
+                                    dbCommand.ExecuteNonQuery();
+                                    // зарегистрировать дружбу
+                                    dbCommand.CommandText = $"INSERT INTO friends(idUser1, idUser2) VALUES('{idSender}', '{idReceiver}');";
+                                    dbCommand.ExecuteNonQuery();
+
+                                    string s = "<Server>: Success! Friend has been added!";
+                                    stream.Write(Encoding.UTF8.GetBytes("{INF}" + s), 0, Encoding.UTF8.GetBytes("{INF}" + s).Length);
+                                }
+                                // Данного запроса в друзья не существует
+                                else
+                                {
+                                    r.Close();
+                                    string s = "<Server>: Request does not exist!";
+                                    stream.Write(Encoding.UTF8.GetBytes("{ER1}" + s), 0, Encoding.UTF8.GetBytes("{ER1}" + s).Length);
+                                }
+                            }
+                            // отправитель не найден в БД
+                            else
+                            {
+                                string s = "<Server>: Sender is not founded!";
+                                stream.Write(Encoding.UTF8.GetBytes("{ER1}" + s), 0, Encoding.UTF8.GetBytes("{ER1}" + s).Length);
+                            }
+                        }
+                        // ключ не действителен
+                        else
+                        {
+                            //
+                            stream.Write(Encoding.UTF8.GetBytes("{ERR}"), 0, Encoding.UTF8.GetBytes("{ERR}").Length);
+                            Console.WriteLine("Key is not valid!");
+                        }
 
                     }
-                    else if (type == "decline_request")
+                    // Отклонить входящий запрос
+                    else if (type == "decline_incoming")
                     {
+                        string key = GetData(stream, true);
+                        string login = GetData(stream, false);
 
+                        string idReceiver = GetIdByKey(key);
+                        if (idReceiver != null)
+                        {
+                            string idSender = GetIdByLogin(login);
+                            if (idSender != null)
+                            {
+                                dbCommand.CommandText = $"SELECT * FROM requests WHERE receiver='{idReceiver}' AND sender='{idSender}';";
+                                SQLiteDataReader r = dbCommand.ExecuteReader();
+
+                                if (r.HasRows) // запрос существует
+                                {
+                                    r.Close();
+                                    // удалить запрос в друзья из таблицы
+                                    dbCommand.CommandText = $"DELETE FROM requests WHERE receiver='{idReceiver}' AND sender='{idSender}';";
+                                    dbCommand.ExecuteNonQuery();
+
+                                    string s = "<Server>: Success! Request rejected!";
+                                    stream.Write(Encoding.UTF8.GetBytes("{INF}" + s), 0, Encoding.UTF8.GetBytes("{INF}" + s).Length);
+                                }
+                                // Данного запроса в друзья не существует
+                                else
+                                {
+                                    r.Close();
+                                    string s = "<Server>: Request does not exist!";
+                                    stream.Write(Encoding.UTF8.GetBytes("{ER1}" + s), 0, Encoding.UTF8.GetBytes("{ER1}" + s).Length);
+                                }
+                            }
+                            // отправитель не найден в БД
+                            else
+                            {
+                                string s = "<Server>: Sender is not founded!";
+                                stream.Write(Encoding.UTF8.GetBytes("{ER1}" + s), 0, Encoding.UTF8.GetBytes("{ER1}" + s).Length);
+                            }
+                        }
+                        // ключ не действителен
+                        else
+                        {
+                            stream.Write(Encoding.UTF8.GetBytes("{ERR}"), 0, Encoding.UTF8.GetBytes("{ERR}").Length);
+                            Console.WriteLine("Key is not valid!");
+                        }
+                    }
+                    // Отменить исходящий запрос
+                    else if (type == "cancel_outgoing")
+                    {
+                        string key = GetData(stream, true);
+                        string login = GetData(stream, false);
+
+                        string idSender = GetIdByKey(key);
+                        if (idSender != null)
+                        {
+                            string idReceiver = GetIdByLogin(login);
+                            if (idReceiver != null)
+                            {
+                                dbCommand.CommandText = $"SELECT * FROM requests WHERE receiver='{idReceiver}' AND sender='{idSender}';";
+                                SQLiteDataReader r = dbCommand.ExecuteReader();
+
+                                if (r.HasRows) // запрос существует
+                                {
+                                    r.Close();
+                                    // удалить исходящий запрос из таблицы
+                                    dbCommand.CommandText = $"DELETE FROM requests WHERE receiver='{idReceiver}' AND sender='{idSender}';";
+                                    dbCommand.ExecuteNonQuery();
+
+                                    string s = "<Server>: Success! Request rejected!";
+                                    stream.Write(Encoding.UTF8.GetBytes("{INF}" + s), 0, Encoding.UTF8.GetBytes("{INF}" + s).Length);
+                                }
+                                // Данного запроса не существует
+                                else
+                                {
+                                    r.Close();
+                                    string s = "<Server>: Request does not exist!";
+                                    stream.Write(Encoding.UTF8.GetBytes("{ER1}" + s), 0, Encoding.UTF8.GetBytes("{ER1}" + s).Length);
+                                }
+                            }
+                            // получатель не найден в БД
+                            else
+                            {
+                                string s = "<Server>: Receiver is not founded!";
+                                stream.Write(Encoding.UTF8.GetBytes("{ER1}" + s), 0, Encoding.UTF8.GetBytes("{ER1}" + s).Length);
+                            }
+                        }
+                        // ключ не действителен
+                        else
+                        {
+                            stream.Write(Encoding.UTF8.GetBytes("{ERR}"), 0, Encoding.UTF8.GetBytes("{ERR}").Length);
+                            Console.WriteLine("Key is not valid!");
+                        }
+                    }
+                    // показать друзей
+                    else if (type == "show_friends")
+                    {
+                        string key = GetData(stream, false);
+                        string id = GetIdByKey(key);
+                        string data = "";
+
+                        // выбрать входящие запросы
+                        dbCommand.CommandText = $"SELECT login FROM users JOIN friends ON (users.id = friends.idUser1 AND friends.idUser2='{id}') OR (users.id = friends.idUser2 AND friends.idUser1='{id}');";
+                        SQLiteDataReader r = dbCommand.ExecuteReader();
+                        // если добавленные друзья есть
+                        if (r.HasRows)
+                        {
+                            while (r.Read())
+                            {
+                                data += r[0].ToString() + "\n";
+                            }
+                            stream.Write(Encoding.UTF8.GetBytes("{INF}" + data), 0, Encoding.UTF8.GetBytes("{INF}" + data).Length);
+                            r.Close();
+                        }
+                        // если добавленных друзей нет
+                        else
+                        {
+                            r.Close();
+                            stream.Write(Encoding.UTF8.GetBytes("{ER1}"), 0, Encoding.UTF8.GetBytes("{ER1}").Length);
+                        }
+                    }
+                    else if (type == "delete_friend")
+                    {
+                        string key = GetData(stream, true);
+                        string login = GetData(stream, false);
+
+                        string idReceiver = GetIdByKey(key);
+                        if (idReceiver != null)
+                        {
+                            string idSender = GetIdByLogin(login);
+                            if (idSender != null)
+                            {
+                                dbCommand.CommandText = $"SELECT * FROM friends WHERE (idUser1='{idReceiver}' AND idUser2='{idSender}') OR (idUser1='{idSender}' AND idUser2='{idReceiver}');";
+                                SQLiteDataReader r = dbCommand.ExecuteReader();
+
+                                if (r.HasRows) // пользователи действительно друзья
+                                {
+                                    r.Close();
+                                    // удалить строку дружбы из таблицы friends
+                                    dbCommand.CommandText = $"DELETE FROM friends WHERE (idUser1='{idReceiver}' AND idUser2='{idSender}') OR (idUser1='{idSender}' AND idUser2='{idReceiver}');";
+                                    dbCommand.ExecuteNonQuery();
+
+                                    string s = "<Server>: Success! Friend has been deleted!";
+                                    stream.Write(Encoding.UTF8.GetBytes("{INF}" + s), 0, Encoding.UTF8.GetBytes("{INF}" + s).Length);
+                                }
+                                // Данного запроса в друзья не существует
+                                else
+                                {
+                                    r.Close();
+                                    string s = "<Server>: You are not friends!";
+                                    stream.Write(Encoding.UTF8.GetBytes("{ER1}" + s), 0, Encoding.UTF8.GetBytes("{ER1}" + s).Length);
+                                }
+                            }
+                            // отправитель не найден в БД
+                            else
+                            {
+                                string s = "<Server>: This user is not founded!";
+                                stream.Write(Encoding.UTF8.GetBytes("{ER1}" + s), 0, Encoding.UTF8.GetBytes("{ER1}" + s).Length);
+                            }
+                        }
+                        // ключ не действителен
+                        else
+                        {
+                            //
+                            stream.Write(Encoding.UTF8.GetBytes("{ERR}"), 0, Encoding.UTF8.GetBytes("{ERR}").Length);
+                            Console.WriteLine("Key is not valid!");
+                        }
                     }
                     else if (type == "exit")
                     { // добавить проверку на подлиность ключа
@@ -368,9 +652,13 @@ namespace Server
                     stream.Close();
                     client.Close();
                 }
+                catch (SQLiteException ex)
+                {
+                    Console.WriteLine("<System>: SQLiteException << " + ex.Message);
+                }
                 catch (Exception e)
                 {
-                    Console.WriteLine(e.Message);
+                    Console.WriteLine("<System>: Exception << " + e.Message);
                 }
             }
         }
@@ -482,6 +770,41 @@ namespace Server
             catch (Exception e)
             {
                 Console.WriteLine("<System>: Exception " + e.Message);
+            }
+        }
+
+        static protected string GetIdByKey(string key)
+        {
+            dbCommand.CommandText = $"SELECT id FROM users WHERE key='{key}';";
+            SQLiteDataReader r = dbCommand.ExecuteReader();
+            r.Read();
+            if (r.HasRows)
+            {
+                string t = r[0].ToString();
+                r.Close();
+                return t;
+            }
+            else
+            {
+                r.Close();
+                return null;
+            }
+        }
+        static protected string GetIdByLogin(string login)
+        {
+            dbCommand.CommandText = $"SELECT id FROM users WHERE login='{login}';";
+            SQLiteDataReader r = dbCommand.ExecuteReader();
+            r.Read();
+            if (r.HasRows)
+            {
+                string t = r[0].ToString();
+                r.Close();
+                return t;
+            }
+            else
+            {
+                r.Close();
+                return null;
             }
         }
     }
