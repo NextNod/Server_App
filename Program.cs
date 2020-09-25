@@ -51,6 +51,8 @@ namespace Server
             Data[0].login = "admin";
             Data[0].pass = "admin";
 
+            string tempString = "";
+
             Server.Start();
             while (true)
             {
@@ -67,47 +69,70 @@ namespace Server
 
                     if (type == "log")
                     {
-                        string log = GetData(stream, true);
-                        string pass = GetData(stream, false);
-                        //bool flag = true;
+                        string log = GetData(stream, false);
 
-                        dbCommand.CommandText = $"SELECT login,password FROM users WHERE login='{log}' and password='{pass}';";
+                        dbCommand.CommandText = $"SELECT salt FROM users WHERE login='{log}';";
+                        // если пользователь имеется в БД, вытянуть соль
                         SQLiteDataReader r = dbCommand.ExecuteReader();
-                        r.Read();
-                        if (!r.HasRows)
+                        if (r.HasRows)
                         {
+                            r.Read();
+                            string salt = r[0].ToString();
                             r.Close();
-                            string s = "<Server>: No such user or wrong password.";
-                            Console.WriteLine(s);
-                            stream.Write(Encoding.UTF8.GetBytes("{ER1}" + s), 0, Encoding.UTF8.GetBytes("{ER1}" + s).Length);
+
+                            stream.Write(Encoding.UTF8.GetBytes(salt), 0, Encoding.UTF8.GetBytes(salt).Length);
+                            string hash = GetData(stream, false);
+
+                            dbCommand.CommandText = $"SELECT id FROM users WHERE password='{hash}';";
+                            r = dbCommand.ExecuteReader();
+                            // пароль верный
+                            if (r.HasRows)
+                            {
+                                r.Close();
+                                bool flag = false;
+                                int key = 0;
+                                do
+                                {
+                                    key = (new Random().Next(100000000, 1000000000));
+                                    dbCommand.CommandText = $"SELECT id FROM users WHERE key='{key.ToString()}';";
+                                    r = dbCommand.ExecuteReader();
+                                    if (!r.HasRows)
+                                    {
+                                        r.Close();
+                                        flag = true;
+                                    }    
+                                } while (!flag);
+                                dbCommand.CommandText = $"UPDATE users SET key='{key.ToString()}' WHERE login='{log}';";
+                                dbCommand.ExecuteNonQuery();
+
+                                tempString = key.ToString();
+                                stream.Write(Encoding.UTF8.GetBytes(tempString), 0, Encoding.UTF8.GetBytes(tempString).Length);
+
+                                Console.WriteLine($"User login: {log}, {key}.");
+                            }
+                            // пароль не верный
+                            else
+                            {
+                                r.Close();
+                                tempString = "<Server>: Invalid password or username..";
+                                Console.WriteLine(tempString);
+                                stream.Write(Encoding.UTF8.GetBytes("{ER1}" + tempString), 0, Encoding.UTF8.GetBytes("{ER1}" + tempString).Length);
+                            }
+
                         }
                         else
                         {
                             r.Close();
-
-                            int key = (new Random().Next(100000000, 1000000000));
-
-                            // проверить нет ли сгенерированного ключа в БД
-
-                            dbCommand.CommandText = $"UPDATE users SET key='{key.ToString()}' WHERE login='{log}';";
-                            dbCommand.ExecuteNonQuery();
-
-                            string s = key.ToString();
-                            stream.Write(Encoding.UTF8.GetBytes(s), 0, Encoding.UTF8.GetBytes(s).Length);
-
-                            dbCommand.CommandText = $"SELECT email FROM users WHERE login='{log}';";
-                            SQLiteDataReader r2 = dbCommand.ExecuteReader();
-                            r2.Read();
-                            string email = r2[0].ToString();
-                            r2.Close();
-
-                            Console.WriteLine($"User login: {log}, {pass}, {email}, {key}.");
+                            string s = "<Server>: Invalid password or username..";
+                            Console.WriteLine(s);
+                            stream.Write(Encoding.UTF8.GetBytes("{ER1}" + s), 0, Encoding.UTF8.GetBytes("{ER1}" + s).Length);
                         }
                     }
                     else if (type == "reg")
                     {
                         string log = GetData(stream, true);
-                        string pass = GetData(stream, true);
+                        string hash = GetData(stream, true);
+                        string salt = GetData(stream, true);
                         string email = GetData(stream, false);
 
                         dbCommand.CommandText = $"SELECT login FROM users WHERE login='{log}';";
@@ -122,7 +147,7 @@ namespace Server
                         else
                         {
                             r.Close();
-                            dbCommand.CommandText = $"SELECT email FROM users WHERE login='{email}';";
+                            dbCommand.CommandText = $"SELECT email FROM users WHERE email='{email}';";
                             r = dbCommand.ExecuteReader();
                             if (r.HasRows)
                             {
@@ -134,10 +159,10 @@ namespace Server
                             else
                             {
                                 r.Close();
-                                dbCommand.CommandText = $"INSERT INTO users(login, password, email) VALUES('{log}', '{pass}', '{email}');";
+                                dbCommand.CommandText = $"INSERT INTO users(login, password, salt, email) VALUES('{log}', '{hash}', '{salt}', '{email}');";
                                 dbCommand.ExecuteNonQuery();
                                 stream.Write(Encoding.UTF8.GetBytes("{INF}Success!"), 0, Encoding.UTF8.GetBytes("{INF}Success!").Length);
-                                Console.WriteLine($"New user: {log}, {pass}, {email}.");
+                                Console.WriteLine($"New user: {log}, {hash}::{salt}, {email}.");
                             }
                         }
                         if (!r.IsClosed)
