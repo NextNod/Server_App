@@ -259,6 +259,8 @@ namespace Server
                             }
                         }
                     }
+                    else if(type == "getMess")
+                    { }
 
                     stream.Close();
                     client.Close();
