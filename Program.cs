@@ -230,6 +230,7 @@ namespace Server
                     {
                         string restKey = GetData(stream, true);
                         string newPass = GetData(stream, false);
+                        bool flag = false;
 
                         for (int i = 0; i < Data.Length; i++)
                         {
@@ -237,13 +238,18 @@ namespace Server
                             {
                                 Data[i].pass = newPass;
                                 Data[i].keyRest = 0;
+                                flag = true;
                                 break;
                             }
-                            else
-                            {
-                                stream.Write(Encoding.UTF8.GetBytes("{ERR}"), 0, Encoding.UTF8.GetBytes("{ERR}").Length);
-                                break;
-                            }
+                        }
+
+                        if (!flag)
+                        {
+                            stream.Write(Encoding.UTF8.GetBytes("{ERR}"), 0, Encoding.UTF8.GetBytes("{ERR}").Length);
+                        }
+                        else 
+                        {
+                            stream.Write(Encoding.UTF8.GetBytes("{SYS}"), 0, Encoding.UTF8.GetBytes("{SYS}").Length);
                         }
                     }
                     else if (type == "exit")
@@ -260,7 +266,41 @@ namespace Server
                         }
                     }
                     else if(type == "getMess")
-                    { }
+                    {
+                        string key = GetData(stream, false);
+                        bool hm = false;
+                        string res = "", log = "";
+
+                        for (int i = 0; i < Data.Length; i++) 
+                        {
+                            if (Data[i].key == Convert.ToInt32(key)) 
+                            {
+                                log = Data[i].login;
+                                hm = true;
+                            }
+                        }
+
+                        if (hm)
+                        {
+                            for (int i = 0; i < messages.Length; i++)
+                            {
+                                if (messages[i].to == log)
+                                {
+                                    res += messages[i].from + ":" + messages[i].value + ".";
+                                }
+                                else if (messages[i].from == log)
+                                {
+                                    res += messages[i].from + ":" + messages[i].value + ".";
+                                }
+                            }
+
+                            stream.Write(Encoding.UTF8.GetBytes(res), 0, Encoding.UTF8.GetBytes(res).Length);
+                        }
+                        else 
+                        {
+                            stream.Write(Encoding.UTF8.GetBytes("No"), 0, Encoding.UTF8.GetBytes("No").Length);
+                        }
+                    }
 
                     stream.Close();
                     client.Close();
